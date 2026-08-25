@@ -1,0 +1,2 @@
+const steps = ['Pickup complete', 'Delivery 1', 'Your delivery', 'Remaining']
+export default function DeliveryTimeline({ position = 2, total = 3 }) { return <div className="timeline">{steps.map((step, index) => <div className={`timeline-step ${index < position ? 'done' : ''} ${index === position ? 'current' : ''}`} key={step}><span>{index < position ? '✓' : index + 1}</span><small>{index === 2 ? `Your delivery · ${position} of ${total}` : step}</small></div>)}</div> }
