@@ -3,6 +3,7 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import cors from "cors";
 import dotenv from "dotenv";
+import { connectDB } from "./config/db.js";
 
 dotenv.config();
 
@@ -36,6 +37,13 @@ io.on("connection", (socket) => {
 });
 
 const PORT = process.env.PORT || 5000;
-httpServer.listen(PORT, () => {
-  console.log(`🚀 Backend server listening on http://localhost:${PORT}`);
-});
+
+const startServer = async () => {
+  await connectDB();
+
+  httpServer.listen(PORT, () => {
+    console.log(`🚀 Backend server listening on http://localhost:${PORT}`);
+  });
+};
+
+startServer();
