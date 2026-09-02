@@ -8,6 +8,11 @@ import mockSocket from '@/lib/socket';
 export default function AdminMonitor() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
+  const [activeTimeout, setActiveTimeout] = useState<{
+    batchId: string;
+    partnerId: string | null;
+    remainingSeconds: number;
+  } | null>(null);
 
   useEffect(() => {
     const refresh = () => setBatches(mockSocket.listBatches());
@@ -30,6 +35,27 @@ export default function AdminMonitor() {
           `Batch reassigned ${p.batch.id} -> ${p.partnerId}`,
           ...s,
         ]);
+        setActiveTimeout({
+          batchId: p.batch.id,
+          partnerId: p.partnerId,
+          remainingSeconds: 15,
+        });
+        refresh();
+      }
+    );
+
+    const unsub4 = mockSocket.on<{ batch: Batch; partnerId: string; expiresInSeconds?: number }>(
+      'partner_offer',
+      (payload) => {
+        setLogs((s) => [
+          `Offer sent for ${payload.batch.id} to ${payload.partnerId}`,
+          ...s,
+        ]);
+        setActiveTimeout({
+          batchId: payload.batch.id,
+          partnerId: payload.partnerId,
+          remainingSeconds: payload.expiresInSeconds ?? 15,
+        });
         refresh();
       }
     );
@@ -40,8 +66,26 @@ export default function AdminMonitor() {
       unsub1();
       unsub2();
       unsub3();
+      unsub4();
     };
   }, []);
+
+  useEffect(() => {
+    if (!activeTimeout) return;
+
+    const timer = window.setInterval(() => {
+      setActiveTimeout((current) => {
+        if (!current) return null;
+        const nextRemaining = Math.max(0, current.remainingSeconds - 1);
+        return {
+          ...current,
+          remainingSeconds: nextRemaining,
+        };
+      });
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [activeTimeout?.batchId]);
 
   function createDemo() {
     const names = ['Rahul Sharma', 'You', 'Anjali Nair', 'Vikram Singh'].slice(
@@ -79,6 +123,21 @@ export default function AdminMonitor() {
             + Create Demo Batch
           </button>
         </div>
+
+        {activeTimeout && (
+          <div className="mt-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <p className="text-xs uppercase tracking-[0.18em] text-amber-300">Assignment timeout</p>
+                <h3 className="mt-1 text-lg font-semibold text-white">Batch {activeTimeout.batchId}</h3>
+              </div>
+              <div className="text-right">
+                <div className="text-3xl font-bold text-amber-300">{activeTimeout.remainingSeconds}s</div>
+                <div className="text-xs text-amber-100/80">Waiting for partner {activeTimeout.partnerId ?? '—'}</div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">

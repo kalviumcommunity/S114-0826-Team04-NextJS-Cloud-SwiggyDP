@@ -7,7 +7,9 @@ import {
   EtaUpdatePayload,
   Order,
   Partner,
+  PartnerAcceptedPayload,
   PartnerOfferPayload,
+  PartnerRejectedPayload,
   BatchReassignedPayload,
 } from '@/types';
 import { IDeliveryService, UnsubscribeFn } from './DeliveryService';
@@ -59,6 +61,7 @@ export class MockDeliveryService implements IDeliveryService {
   };
 
   private deliveryIntervals: Map<string, NodeJS.Timeout> = new Map();
+  private timeoutIntervals: Map<string, NodeJS.Timeout> = new Map();
 
   constructor() {
     this.seedInitialData();
@@ -194,12 +197,15 @@ export class MockDeliveryService implements IDeliveryService {
       totalDistanceKm: Number((Math.random() * 3 + 2.5).toFixed(1)),
       createdAt: new Date().toISOString(),
       reassignmentCount: 0,
+      assignmentTimeoutAt: new Date(Date.now() + 15_000).toISOString(),
+      timeoutRemainingSeconds: 15,
       restaurantName: 'Truffles — Burgers & Steaks',
       restaurantArea: 'Koramangala 4th Block',
     };
 
     this.batches.unshift(batch);
     this.notifyBatchCreated(batch);
+    this.startAssignmentTimeout(batch);
     this.notifyPartnerOffer({
       batch,
       partnerId: randomPartner.id,
@@ -219,9 +225,13 @@ export class MockDeliveryService implements IDeliveryService {
     );
     if (!batch) return;
 
+    this.clearAssignmentTimeout(batch.id);
+
     if (accepted) {
       batch.status = 'in_transit';
       batch.orders.forEach((o) => (o.status = 'in_transit'));
+      batch.assignmentTimeoutAt = undefined;
+      batch.timeoutRemainingSeconds = 0;
       this.notifyPartnerAccepted({ batch, partnerId });
       this.notifyBatchUpdated(batch);
       this.startDeliverySimulation(batch);
@@ -230,7 +240,6 @@ export class MockDeliveryService implements IDeliveryService {
       this.notifyPartnerRejected({ batch, partnerId, reason });
       this.notifyBatchUpdated(batch);
 
-      // Rapid Reassignment within 5 seconds as specified in PRD FR3
       setTimeout(() => {
         this.forceReassign(batch.id);
       }, 2500);
@@ -249,6 +258,8 @@ export class MockDeliveryService implements IDeliveryService {
     batch.partner = nextPartner;
     batch.status = 'assigned';
     batch.reassignmentCount = (batch.reassignmentCount || 0) + 1;
+    batch.assignmentTimeoutAt = new Date(Date.now() + 15_000).toISOString();
+    batch.timeoutRemainingSeconds = 15;
     // Slight ETA drift on reassignment (2-4 mins)
     batch.etaMinutes = Math.min(60, batch.etaMinutes + 3);
 
@@ -261,6 +272,7 @@ export class MockDeliveryService implements IDeliveryService {
 
     this.notifyBatchReassigned(payload);
     this.notifyBatchUpdated(batch);
+    this.startAssignmentTimeout(batch);
     this.notifyPartnerOffer({
       batch,
       partnerId: nextPartner.id,
@@ -297,6 +309,34 @@ export class MockDeliveryService implements IDeliveryService {
         etaMinutes: batch.etaMinutes,
       });
       this.notifyBatchUpdated(batch);
+    }
+  }
+
+  private startAssignmentTimeout(batch: Batch) {
+    this.clearAssignmentTimeout(batch.id);
+
+    const deadline = Date.now() + 15_000;
+    batch.assignmentTimeoutAt = new Date(deadline).toISOString();
+    batch.timeoutRemainingSeconds = 15;
+
+    const interval = setInterval(() => {
+      const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      batch.timeoutRemainingSeconds = remaining;
+
+      if (remaining <= 0) {
+        this.clearAssignmentTimeout(batch.id);
+        this.forceReassign(batch.id);
+      }
+    }, 1000);
+
+    this.timeoutIntervals.set(batch.id, interval);
+  }
+
+  private clearAssignmentTimeout(batchId: string) {
+    const interval = this.timeoutIntervals.get(batchId);
+    if (interval) {
+      clearInterval(interval);
+      this.timeoutIntervals.delete(batchId);
     }
   }
 
@@ -381,11 +421,11 @@ export class MockDeliveryService implements IDeliveryService {
     this.listeners.partnerOffer.forEach((cb) => cb(payload));
   }
 
-  private notifyPartnerAccepted(payload: { batch: Batch; partnerId: string }) {
+  private notifyPartnerAccepted(payload: PartnerAcceptedPayload) {
     this.listeners.partnerAccepted.forEach((cb) => cb(payload));
   }
 
-  private notifyPartnerRejected(payload: { batch: Batch; partnerId: string }) {
+  private notifyPartnerRejected(payload: PartnerRejectedPayload) {
     this.listeners.partnerRejected.forEach((cb) => cb(payload));
   }
 

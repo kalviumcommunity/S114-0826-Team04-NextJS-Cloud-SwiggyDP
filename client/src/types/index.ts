@@ -56,6 +56,8 @@ export interface Batch {
   totalDistanceKm?: number;
   createdAt?: string;
   reassignmentCount?: number;
+  assignmentTimeoutAt?: string;
+  timeoutRemainingSeconds?: number;
   restaurantName?: string;
   restaurantArea?: string;
 }

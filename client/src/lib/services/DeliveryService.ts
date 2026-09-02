@@ -3,6 +3,8 @@ import {
   CustomerTrackingData,
   Partner,
   PartnerOfferPayload,
+  PartnerAcceptedPayload,
+  PartnerRejectedPayload,
   DeliveryProgressPayload,
   EtaUpdatePayload,
   BatchReassignedPayload,
