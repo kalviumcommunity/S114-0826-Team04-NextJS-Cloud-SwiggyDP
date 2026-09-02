@@ -22,6 +22,8 @@ export interface IOrder extends Document {
   status: OrderStatus;
   assignedPartnerId?: mongoose.Types.ObjectId;
   batchId?: string;
+  assignmentTimeoutAt?: Date | null;
+  retryCount?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -61,6 +63,8 @@ const OrderSchema = new Schema<IOrder>(
       ref: "DeliveryPartner",
     },
     batchId: { type: String },
+    assignmentTimeoutAt: { type: Date, default: null },
+    retryCount: { type: Number, default: 0 },
   },
   { timestamps: true },
 );

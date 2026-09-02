@@ -3,6 +3,7 @@ import { Request, Response } from "express";
 import { Order } from "../models/Order.js";
 import { DeliveryPartner } from "../models/DeliveryPartner.js";
 import { findNearestAvailablePartner } from "../batching.js";
+import { getNextAssignmentTimeout } from "../assignmentTimeout.js";
 
 export const createOrder = async (req: Request, res: Response) => {
   try {
@@ -65,6 +66,8 @@ export const batchOrders = async (req: Request, res: Response) => {
             assignedPartnerId: partner.id,
             status: "assigned",
             batchId: `batch-${Date.now()}`,
+            assignmentTimeoutAt: getNextAssignmentTimeout(),
+            retryCount: 0,
           },
           { new: true },
         );
@@ -131,6 +134,8 @@ export const reassignOrder = async (req: Request, res: Response) => {
 
     order.assignedPartnerId = new mongoose.Types.ObjectId(nearest.id);
     order.status = "reassigned";
+    order.assignmentTimeoutAt = getNextAssignmentTimeout();
+    order.retryCount = (order.retryCount ?? 0) + 1;
     await order.save();
 
     const io = req.app.get("io");
